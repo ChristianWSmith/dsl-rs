@@ -31,13 +31,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let c = dbus::blocking::Connection::new_session()?;
-    c.request_name("com.ChristianWSmith.dsl", false, true, false)?;
+    c.request_name(dsl::constants::DBUS_DEST, false, true, false)?;
     let mut cr = dbus_crossroads::Crossroads::new();
-    let token = cr.register("com.ChristianWSmith.dsl", |b| {
+    let token = cr.register(dsl::constants::DBUS_DEST, |b| {
         b.method(
-            "DSLCommand",
-            ("dbus_message",),
-            ("reply",),
+            dsl::constants::DBUS_METHOD,
+            (dsl::constants::DBUS_ARG,),
+            (dsl::constants::DBUS_REPLY,),
             |_, _, (dbus_message,): (String,)| {
                 let dsl_command: Command = Command {
                     command_type: CommandType::MOVE,
@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
         );
     });
-    cr.insert("/dslcommand", &[token], ());
+    cr.insert(dsl::constants::DBUS_PATH, &[token], ());
     cr.serve(&c)?;
     Ok(())
 }
