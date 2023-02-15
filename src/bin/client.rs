@@ -8,7 +8,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         dsl::constants::DBUS_PATH,
         std::time::Duration::from_millis(5000),
     );
-    let (reply,): (String,) =
-        proxy.method_call(dsl::constants::DBUS_DEST, dsl::constants::DBUS_METHOD, (dbus_message,))?;
+    let (reply,): (String,) = proxy.method_call(
+        dsl::constants::DBUS_DEST,
+        dsl::constants::DBUS_METHOD,
+        (dbus_message,),
+    )?;
     Ok(())
 }
