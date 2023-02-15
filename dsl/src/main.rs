@@ -1,7 +1,7 @@
-use std::io::{stdin, stdout, Write};
-use swayipc::{Connection, Fallible};
+use swayipc;
 
-fn main() -> Fallible<()> {
-    let mut connection = Connection::new()?;
+fn main() -> swayipc::Fallible<()> {
+    let mut sway_connection = swayipc::Connection::new()?;
+
     Ok(())
 }
