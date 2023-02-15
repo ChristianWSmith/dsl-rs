@@ -35,22 +35,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cr = dbus_crossroads::Crossroads::new();
     let token = cr.register("com.ChristianWSmith.dsl", |b| {
         b.method(
-            "SwayCommand",
-            ("command",),
+            "DSLCommand",
+            ("dbus_message",),
             ("reply",),
-            |_, _, (command,): (String,)| {
+            |_, _, (dbus_message,): (String,)| {
                 let dsl_command: Command = Command {
                     command_type: CommandType::MOVE,
                     direction: Direction::UP,
                     workspace_name: "".to_string(),
                 };
                 CHANNEL.0.send(dsl_command, 0);
-                SWAY.lock().unwrap().run_command(&command);
-                Ok((format!("{}", &command),))
+                SWAY.lock().unwrap().run_command(&dbus_message);
+                Ok((format!("{}", &dbus_message),))
             },
         );
     });
-    cr.insert("/swaycommand", &[token], ());
+    cr.insert("/dslcommand", &[token], ());
     cr.serve(&c)?;
     Ok(())
 }
