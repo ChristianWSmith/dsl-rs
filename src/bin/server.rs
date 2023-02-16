@@ -1,3 +1,38 @@
+fn get_parent_map(node: &swayipc::Node) -> std::collections::HashMap<i64, &swayipc::Node> {
+    let mut parent_map: std::collections::HashMap<i64, &swayipc::Node> =
+        std::collections::HashMap::new();
+    let mut layer = vec![node];
+    let mut next_layer = vec![];
+    while layer.len() > 0 {
+        for node in layer {
+            for child in &node.nodes {
+                parent_map.insert(child.id, node);
+            }
+        }
+        layer = next_layer;
+        next_layer = vec![];
+    }
+    parent_map
+}
+
+fn get_workspaces(node: &swayipc::Node) -> Vec<&swayipc::Node> {
+    let mut out: Vec<&swayipc::Node> = vec![];
+    let mut layer = vec![node];
+    let mut next_layer = vec![];
+    while layer.len() > 0 {
+        for node in layer {
+            if node.node_type == swayipc::NodeType::Workspace {
+                out.push(node)
+            } else {
+                next_layer.extend(&node.nodes);
+            }
+        }
+        layer = next_layer;
+        next_layer = vec![];
+    }
+    out
+}
+
 fn get_leaf_containers(node: &swayipc::Node) -> Vec<&swayipc::Node> {
     let mut out: Vec<&swayipc::Node> = vec![];
     if node.nodes.len() == 0 {
@@ -29,7 +64,7 @@ fn find_focus_id(node: &swayipc::Node) -> i64 {
     -1
 }
 
-fn enforce_layout_workspace(workspace: &swayipc::Node) -> Vec<String> {
+fn enforce_splitting_workspace(workspace: &swayipc::Node) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     let leaves = get_leaf_containers(&workspace);
     if leaves.len() == 1 {
@@ -43,36 +78,49 @@ fn enforce_layout_workspace(workspace: &swayipc::Node) -> Vec<String> {
         let right = *leaves.get(1).unwrap();
         out.push(format!("[con_id={}] splitv; ", left.id));
         out.push(format!("[con_id={}] splitv; ", right.id));
-        out.push(format!(
-            "[con_id={}] focus parent; mark --add master-{:?}",
-            left.id, &workspace.name
-        ));
-        out.push(format!(
-            "[con_id={}] focus parent; mark --add stack-{:?}",
-            right.id, &workspace.name
-        ));
     }
     out
 }
 
-fn enforce_layout(head: &swayipc::Node) -> Vec<String> {
+fn enforce_splitting(workspaces: Vec<&swayipc::Node>) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    if head.node_type == swayipc::NodeType::Workspace {
-        out.extend(enforce_layout_workspace(&head));
-    } else {
-        for node in &head.nodes {
-            out.extend(enforce_layout(&node));
-        }
+    for workspace in workspaces {
+        out.extend(enforce_splitting_workspace(workspace));
+    }
+    out
+}
+
+fn enforce_marking_workspace(workspace: &swayipc::Node) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    if workspace.nodes.len() == 2 {
+        let left = workspace.nodes.get(0).unwrap();
+        let right = workspace.nodes.get(1).unwrap();
+        out.push(format!("[con_id={}] mark --add master; ", left.id));
+        out.push(format!("[con_id={}] mark --add stack; ", right.id));
+    }
+    out
+}
+
+fn enforce_marking(workspaces: Vec<&swayipc::Node>) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for workspace in workspaces {
+        out.extend(enforce_marking_workspace(workspace));
     }
     out
 }
 
 fn process_layout(sway: &mut swayipc::Connection) {
-    let tree = sway.get_tree().unwrap();
+    let mut tree = sway.get_tree().unwrap();
     let focus_id = find_focus_id(&tree);
     let refocus_command = format!("[con_id={}] focus; ", focus_id);
-    let sway_command = enforce_layout(&tree);
-    sway.run_command(sway_command.concat()).unwrap();
+
+    let splitting_command = enforce_splitting(get_workspaces(&tree));
+    sway.run_command(splitting_command.concat()).unwrap();
+
+    tree = sway.get_tree().unwrap();
+    let marking_command = enforce_marking(get_workspaces(&tree));
+    sway.run_command(marking_command.concat()).unwrap();
+
     sway.run_command(refocus_command).unwrap();
 }
 
