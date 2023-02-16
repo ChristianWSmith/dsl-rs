@@ -12,7 +12,24 @@ fn get_leaf_containers(node: &swayipc::Node) -> Vec<&swayipc::Node> {
     out
 }
 
-fn enforce_layout_workspace(workspace: swayipc::Node) -> Vec<String> {
+fn find_focus_id(node: &swayipc::Node) -> i64 {
+    let mut layer = vec![node];
+    let mut next_layer = vec![];
+    while layer.len() > 0 {
+        for node in layer {
+            if node.focused {
+                return node.id;
+            } else {
+                next_layer.extend(&node.nodes);
+            }
+        }
+        layer = next_layer;
+        next_layer = vec![];
+    }
+    -1
+}
+
+fn enforce_layout_workspace(workspace: &swayipc::Node) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     let leaves = get_leaf_containers(&workspace);
     if leaves.len() == 1 {
@@ -26,17 +43,25 @@ fn enforce_layout_workspace(workspace: swayipc::Node) -> Vec<String> {
         let right = *leaves.get(1).unwrap();
         out.push(format!("[con_id={}] splitv; ", left.id));
         out.push(format!("[con_id={}] splitv; ", right.id));
+        out.push(format!(
+            "[con_id={}] focus parent; mark --add master-{:?}",
+            left.id, &workspace.name
+        ));
+        out.push(format!(
+            "[con_id={}] focus parent; mark --add stack-{:?}",
+            right.id, &workspace.name
+        ));
     }
     out
 }
 
-fn enforce_layout(head: swayipc::Node) -> Vec<String> {
+fn enforce_layout(head: &swayipc::Node) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     if head.node_type == swayipc::NodeType::Workspace {
-        out.extend(enforce_layout_workspace(head));
+        out.extend(enforce_layout_workspace(&head));
     } else {
-        for node in head.nodes {
-            out.extend(enforce_layout(node));
+        for node in &head.nodes {
+            out.extend(enforce_layout(&node));
         }
     }
     out
@@ -44,9 +69,11 @@ fn enforce_layout(head: swayipc::Node) -> Vec<String> {
 
 fn process_layout(sway: &mut swayipc::Connection) {
     let tree = sway.get_tree().unwrap();
-    let sway_commands = enforce_layout(tree);
-    println!("{:?}", sway_commands);
-    sway.run_command(sway_commands.concat());
+    let focus_id = find_focus_id(&tree);
+    let refocus_command = format!("[con_id={}] focus; ", focus_id);
+    let sway_command = enforce_layout(&tree);
+    sway.run_command(sway_command.concat()).unwrap();
+    sway.run_command(refocus_command).unwrap();
 }
 
 fn process_move(sway: &mut swayipc::Connection, tokens: Vec<&str>) {
