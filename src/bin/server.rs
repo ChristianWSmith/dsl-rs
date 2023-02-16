@@ -1,5 +1,5 @@
 fn command_processor(command_receiver: async_priority_channel::Receiver<String, usize>) {
-    let sway = swayipc::Connection::new().unwrap();
+    let _sway = swayipc::Connection::new().unwrap();
     loop {
         let command = sync_recv(&command_receiver);
         println!("{}", command);
@@ -8,7 +8,7 @@ fn command_processor(command_receiver: async_priority_channel::Receiver<String, 
 
 fn sway_event_listener(command_sender: async_priority_channel::Sender<String, usize>) {
     let subs = [swayipc::EventType::Window];
-    for event in swayipc::Connection::new().unwrap().subscribe(subs).unwrap() {
+    for _event in swayipc::Connection::new().unwrap().subscribe(subs).unwrap() {
         sync_send(&command_sender, "layout".to_string(), 1);
     }
 }
@@ -32,7 +32,7 @@ fn dbus_listener(command_sender: async_priority_channel::Sender<String, usize>) 
         );
     });
     crossroads.insert(dsl::constants::DBUS_PATH, &[token], ());
-    crossroads.serve(&dbus_connection);
+    crossroads.serve(&dbus_connection).unwrap();
 }
 
 fn sync_send<I, P: std::cmp::Ord>(
@@ -52,7 +52,7 @@ async fn async_send<I, P: std::cmp::Ord>(
     item: I,
     priority: P,
 ) {
-    sender.send(item, priority).await;
+    sender.send(item, priority).await.unwrap();
 }
 
 async fn async_recv<I, P: std::cmp::Ord>(receiver: &async_priority_channel::Receiver<I, P>) -> I {
@@ -78,8 +78,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         command_processor(command_receiver);
     });
 
-    dbus_handle.join();
-    sway_handle.join();
-    processor_handle.join();
+    dbus_handle.join().unwrap();
+    sway_handle.join().unwrap();
+    processor_handle.join().unwrap();
     Ok(())
 }
