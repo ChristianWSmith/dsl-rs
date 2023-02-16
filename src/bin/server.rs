@@ -15,9 +15,9 @@ fn process_kill(sway: &swayipc::Connection) {
 }
 
 fn command_processor(command_receiver: async_priority_channel::Receiver<String, usize>) {
-    let sway = swayipc::Connection::new().unwrap();
+    let sway: swayipc::Connection = swayipc::Connection::new().unwrap();
     loop {
-        let command = sync_recv(&command_receiver);
+        let command: String = sync_recv(&command_receiver);
         let mut tokens: Vec<&str> = command.split_whitespace().collect();
         match tokens.remove(0) {
             dsl::constants::CMD_LAYOUT => process_layout(&sway),
@@ -30,14 +30,14 @@ fn command_processor(command_receiver: async_priority_channel::Receiver<String, 
 }
 
 fn sway_event_listener(command_sender: async_priority_channel::Sender<String, usize>) {
-    let subs = [swayipc::EventType::Window];
-    let sway_window_changes = vec![
+    let subs: Vec<swayipc::EventType> = vec![swayipc::EventType::Window];
+    let sway_window_changes: Vec<swayipc::WindowChange> = vec![
         swayipc::WindowChange::New,
         swayipc::WindowChange::Close,
         swayipc::WindowChange::Move,
     ];
     for event in swayipc::Connection::new().unwrap().subscribe(subs).unwrap() {
-        let window_event = match event.unwrap() {
+        let window_event: Box<swayipc::WindowEvent> = match event.unwrap() {
             swayipc::Event::Window(c) => c,
             _ => unreachable!(),
         };
@@ -54,17 +54,18 @@ fn dbus_listener(command_sender: async_priority_channel::Sender<String, usize>) 
         .request_name(dsl::constants::DBUS_DEST, false, true, false)
         .unwrap();
     let mut crossroads: dbus_crossroads::Crossroads = dbus_crossroads::Crossroads::new();
-    let token = crossroads.register(dsl::constants::DBUS_DEST, |builder| {
-        builder.method(
-            dsl::constants::DBUS_METHOD,
-            (dsl::constants::DBUS_ARG,),
-            (dsl::constants::DBUS_REPLY,),
-            move |_, _, (dbus_message,): (String,)| {
-                sync_send(&command_sender, dbus_message, 0);
-                Ok(("",))
-            },
-        );
-    });
+    let token: dbus_crossroads::IfaceToken<()> =
+        crossroads.register(dsl::constants::DBUS_DEST, |builder| {
+            builder.method(
+                dsl::constants::DBUS_METHOD,
+                (dsl::constants::DBUS_ARG,),
+                (dsl::constants::DBUS_REPLY,),
+                move |_, _, (dbus_message,): (String,)| {
+                    sync_send(&command_sender, dbus_message, 0);
+                    Ok(("",))
+                },
+            );
+        });
     crossroads.insert(dsl::constants::DBUS_PATH, &[token], ());
     crossroads.serve(&dbus_connection).unwrap();
 }
@@ -99,15 +100,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         async_priority_channel::Receiver<String, usize>,
     ) = async_priority_channel::unbounded();
 
-    let command_sender_clone = command_sender.clone();
+    let command_sender_clone: async_priority_channel::Sender<String, usize> =
+        command_sender.clone();
 
-    let dbus_handle = std::thread::spawn(move || {
+    let dbus_handle: std::thread::JoinHandle<()> = std::thread::spawn(move || {
         dbus_listener(command_sender);
     });
-    let sway_handle = std::thread::spawn(move || {
+    let sway_handle: std::thread::JoinHandle<()> = std::thread::spawn(move || {
         sway_event_listener(command_sender_clone);
     });
-    let processor_handle = std::thread::spawn(move || {
+    let processor_handle: std::thread::JoinHandle<()> = std::thread::spawn(move || {
         command_processor(command_receiver);
     });
 
