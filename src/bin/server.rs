@@ -82,31 +82,79 @@ fn enforce_splitting_workspace(workspace: &swayipc::Node) -> Vec<String> {
     out
 }
 
-fn enforce_splitting(workspaces: Vec<&swayipc::Node>) -> Vec<String> {
+fn enforce_splitting(workspaces: Vec<&swayipc::Node>) -> String {
     let mut out: Vec<String> = vec![];
     for workspace in workspaces {
         out.extend(enforce_splitting_workspace(workspace));
     }
-    out
+    out.concat()
 }
 
 fn enforce_marking_workspace(workspace: &swayipc::Node) -> Vec<String> {
     let mut out: Vec<String> = vec![];
+    let master_mark = format!("master-{:}", workspace.name.clone().unwrap());
+    let stack_mark = format!("stack-{:}", workspace.name.clone().unwrap());
     if workspace.nodes.len() == 2 {
         let left = workspace.nodes.get(0).unwrap();
         let right = workspace.nodes.get(1).unwrap();
-        out.push(format!("[con_id={}] mark --add master; ", left.id));
-        out.push(format!("[con_id={}] mark --add stack; ", right.id));
+        if !left.marks.contains(&master_mark) {
+            out.push(format!(
+                "[con_id={}] mark --add {:}; ",
+                left.id, master_mark
+            ));
+        }
+        if !right.marks.contains(&stack_mark) {
+            out.push(format!(
+                "[con_id={}] mark --add {:}; ",
+                right.id, stack_mark
+            ));
+        }
     }
     out
 }
 
-fn enforce_marking(workspaces: Vec<&swayipc::Node>) -> Vec<String> {
+fn enforce_marking(workspaces: Vec<&swayipc::Node>) -> String {
     let mut out: Vec<String> = vec![];
     for workspace in workspaces {
         out.extend(enforce_marking_workspace(workspace));
     }
+    out.concat()
+}
+
+fn enforce_eviction_workspace(workspace: &swayipc::Node) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    let master_mark = format!("master-{:}", workspace.name.clone().unwrap());
+    let stack_mark = format!("stack-{:}", workspace.name.clone().unwrap());
+    if workspace.nodes.len() > 1 {
+        let parent = workspace.nodes.get(0).unwrap();
+        if parent.marks.contains(&master_mark) {
+            let mut master_found = false;
+            for child in &parent.nodes {
+                let is_temp_master = child
+                    .marks
+                    .contains(&dsl::constants::SWAY_TEMP_MASTER_MARK.to_string());
+                if master_found {
+                    if !is_temp_master {
+                        out.push(format!(
+                            "[con_id={}] move container to mark {:}; ",
+                            child.id, stack_mark
+                        ));
+                    }
+                } else if !is_temp_master {
+                    master_found = true
+                }
+            }
+        }
+    }
     out
+}
+
+fn enforce_eviction(workspaces: Vec<&swayipc::Node>) -> String {
+    let mut out: Vec<String> = vec![];
+    for workspace in workspaces {
+        out.extend(enforce_eviction_workspace(workspace));
+    }
+    out.concat()
 }
 
 fn process_layout(sway: &mut swayipc::Connection) {
@@ -114,14 +162,31 @@ fn process_layout(sway: &mut swayipc::Connection) {
     let focus_id = find_focus_id(&tree);
     let refocus_command = format!("[con_id={}] focus; ", focus_id);
 
+    let mut ran_command = false;
+
     let splitting_command = enforce_splitting(get_workspaces(&tree));
-    sway.run_command(splitting_command.concat()).unwrap();
+    if splitting_command != "" {
+        sway.run_command(splitting_command).unwrap();
+        ran_command = true;
+    }
 
     tree = sway.get_tree().unwrap();
     let marking_command = enforce_marking(get_workspaces(&tree));
-    sway.run_command(marking_command.concat()).unwrap();
+    if marking_command != "" {
+        sway.run_command(marking_command).unwrap();
+        ran_command = true;
+    }
 
-    sway.run_command(refocus_command).unwrap();
+    tree = sway.get_tree().unwrap();
+    let eviction_command = enforce_eviction(get_workspaces(&tree));
+    if eviction_command != "" {
+        sway.run_command(eviction_command).unwrap();
+        ran_command = true;
+    }
+
+    if ran_command {
+        sway.run_command(refocus_command).unwrap();
+    }
 }
 
 fn process_move(sway: &mut swayipc::Connection, tokens: Vec<&str>) {
