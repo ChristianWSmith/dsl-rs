@@ -1,74 +1,33 @@
-#[macro_use]
-extern crate lazy_static;
-
-#[derive(Debug)]
-enum CommandType {
-    MOVE,
-    MOVE_TO_WORKSPACE,
-    KILL,
-    LAYOUT,
-}
-
-#[derive(Debug)]
-enum Direction {
-    UP,
-    DOWN,
-    LEFT,
-    RIGHT,
-    NONE,
-}
-
-#[derive(Debug)]
-struct Command {
-    command_type: CommandType,
-    direction: Direction,
-    workspace_name: String,
-}
-
-fn parse_dbus_message(dbus_message: &str) -> Command {
-    Command {
-        command_type: CommandType::KILL,
-        direction: Direction::NONE,
-        workspace_name: "".to_string(),
-    }
-}
-
-fn command_processor(command_receiver: async_priority_channel::Receiver<Command, usize>) {
+fn command_processor(command_receiver: async_priority_channel::Receiver<String, usize>) {
     let sway = swayipc::Connection::new().unwrap();
     loop {
         let command = sync_recv(&command_receiver);
-        println!("{:?}", command);
+        println!("{}", command);
     }
 }
 
-fn sway_event_listener(command_sender: async_priority_channel::Sender<Command, usize>) {
+fn sway_event_listener(command_sender: async_priority_channel::Sender<String, usize>) {
     let subs = [swayipc::EventType::Window];
     for event in swayipc::Connection::new().unwrap().subscribe(subs).unwrap() {
-        let command: Command = Command {
-            command_type: CommandType::LAYOUT,
-            direction: Direction::NONE,
-            workspace_name: "".to_string(),
-        };
-        sync_send(&command_sender, command, 1);
+        sync_send(&command_sender, "layout".to_string(), 1);
     }
 }
 
-fn dbus_listener(command_sender: async_priority_channel::Sender<Command, usize>) {
+fn dbus_listener(command_sender: async_priority_channel::Sender<String, usize>) {
     let dbus_connection: dbus::blocking::Connection =
         dbus::blocking::Connection::new_session().unwrap();
     dbus_connection
         .request_name(dsl::constants::DBUS_DEST, false, true, false)
         .unwrap();
     let mut crossroads: dbus_crossroads::Crossroads = dbus_crossroads::Crossroads::new();
-    let token = crossroads.register(dsl::constants::DBUS_DEST, |b| {
-        b.method(
+    let token = crossroads.register(dsl::constants::DBUS_DEST, |builder| {
+        builder.method(
             dsl::constants::DBUS_METHOD,
             (dsl::constants::DBUS_ARG,),
             (dsl::constants::DBUS_REPLY,),
             move |_, _, (dbus_message,): (String,)| {
-                let command: Command = parse_dbus_message(&dbus_message);
-                sync_send(&command_sender, command, 0);
-                Ok((format!("{}", &dbus_message),))
+                sync_send(&command_sender, dbus_message, 0);
+                Ok(("",))
             },
         );
     });
@@ -76,34 +35,34 @@ fn dbus_listener(command_sender: async_priority_channel::Sender<Command, usize>)
     crossroads.serve(&dbus_connection);
 }
 
-fn sync_send(
-    sender: &async_priority_channel::Sender<Command, usize>,
-    command: Command,
-    priority: usize,
+fn sync_send<I, P: std::cmp::Ord>(
+    sender: &async_priority_channel::Sender<I, P>,
+    item: I,
+    priority: P,
 ) {
-    futures::executor::block_on(async_send(sender, command, priority));
+    futures::executor::block_on(async_send(sender, item, priority));
 }
 
-fn sync_recv(receiver: &async_priority_channel::Receiver<Command, usize>) -> Command {
+fn sync_recv<I, P: std::cmp::Ord>(receiver: &async_priority_channel::Receiver<I, P>) -> I {
     futures::executor::block_on(async_recv(receiver))
 }
 
-async fn async_send(
-    sender: &async_priority_channel::Sender<Command, usize>,
-    command: Command,
-    priority: usize,
+async fn async_send<I, P: std::cmp::Ord>(
+    sender: &async_priority_channel::Sender<I, P>,
+    item: I,
+    priority: P,
 ) {
-    sender.send(command, priority).await;
+    sender.send(item, priority).await;
 }
 
-async fn async_recv(receiver: &async_priority_channel::Receiver<Command, usize>) -> Command {
+async fn async_recv<I, P: std::cmp::Ord>(receiver: &async_priority_channel::Receiver<I, P>) -> I {
     receiver.recv().await.unwrap().0
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (command_sender, command_receiver): (
-        async_priority_channel::Sender<Command, usize>,
-        async_priority_channel::Receiver<Command, usize>,
+        async_priority_channel::Sender<String, usize>,
+        async_priority_channel::Receiver<String, usize>,
     ) = async_priority_channel::unbounded();
 
     let dbus_listener_command_sender = command_sender.clone();
