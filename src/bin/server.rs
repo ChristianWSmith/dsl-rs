@@ -25,12 +25,11 @@ struct Command {
     workspace_name: String,
 }
 
-
 fn parse_dbus_message(dbus_message: &str) -> Command {
     Command {
         command_type: CommandType::KILL,
         direction: Direction::NONE,
-        workspace_name: "".to_string()
+        workspace_name: "".to_string(),
     }
 }
 
@@ -43,9 +42,7 @@ fn command_processor(command_receiver: async_priority_channel::Receiver<Command,
 }
 
 fn sway_event_listener(command_sender: async_priority_channel::Sender<Command, usize>) {
-    let subs = [
-        swayipc::EventType::Window,
-    ];
+    let subs = [swayipc::EventType::Window];
     for event in swayipc::Connection::new().unwrap().subscribe(subs).unwrap() {
         let command: Command = Command {
             command_type: CommandType::LAYOUT,
@@ -57,8 +54,11 @@ fn sway_event_listener(command_sender: async_priority_channel::Sender<Command, u
 }
 
 fn dbus_listener(command_sender: async_priority_channel::Sender<Command, usize>) {
-    let dbus_connection: dbus::blocking::Connection = dbus::blocking::Connection::new_session().unwrap();
-    dbus_connection.request_name(dsl::constants::DBUS_DEST, false, true, false).unwrap();
+    let dbus_connection: dbus::blocking::Connection =
+        dbus::blocking::Connection::new_session().unwrap();
+    dbus_connection
+        .request_name(dsl::constants::DBUS_DEST, false, true, false)
+        .unwrap();
     let mut crossroads: dbus_crossroads::Crossroads = dbus_crossroads::Crossroads::new();
     let token = crossroads.register(dsl::constants::DBUS_DEST, |b| {
         b.method(
@@ -76,7 +76,11 @@ fn dbus_listener(command_sender: async_priority_channel::Sender<Command, usize>)
     crossroads.serve(&dbus_connection);
 }
 
-fn sync_send(sender: &async_priority_channel::Sender<Command, usize>, command: Command, priority: usize) {
+fn sync_send(
+    sender: &async_priority_channel::Sender<Command, usize>,
+    command: Command,
+    priority: usize,
+) {
     futures::executor::block_on(async_send(sender, command, priority));
 }
 
@@ -84,7 +88,11 @@ fn sync_recv(receiver: &async_priority_channel::Receiver<Command, usize>) -> Com
     futures::executor::block_on(async_recv(receiver))
 }
 
-async fn async_send(sender: &async_priority_channel::Sender<Command, usize>, command: Command, priority: usize) {
+async fn async_send(
+    sender: &async_priority_channel::Sender<Command, usize>,
+    command: Command,
+    priority: usize,
+) {
     sender.send(command, priority).await;
 }
 
@@ -93,9 +101,9 @@ async fn async_recv(receiver: &async_priority_channel::Receiver<Command, usize>)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (command_sender, command_receiver) : (
+    let (command_sender, command_receiver): (
         async_priority_channel::Sender<Command, usize>,
-        async_priority_channel::Receiver<Command, usize>
+        async_priority_channel::Receiver<Command, usize>,
     ) = async_priority_channel::unbounded();
 
     let dbus_listener_command_sender = command_sender.clone();
