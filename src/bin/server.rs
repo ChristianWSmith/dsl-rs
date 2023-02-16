@@ -159,21 +159,33 @@ fn enforce_eviction(workspaces: Vec<&swayipc::Node>) -> String {
 
 fn process_layout(sway: &mut swayipc::Connection) {
     let mut tree = sway.get_tree().unwrap();
+    let focus_id = find_focus_id(&tree);
+    let refocus_command = format!("[con_id={}] focus; ", focus_id);
+
+    let mut ran_command = false;
+
     let splitting_command = enforce_splitting(get_workspaces(&tree));
     if splitting_command != "" {
         sway.run_command(splitting_command).unwrap();
+        ran_command = true;
     }
 
     tree = sway.get_tree().unwrap();
     let marking_command = enforce_marking(get_workspaces(&tree));
     if marking_command != "" {
         sway.run_command(marking_command).unwrap();
+        ran_command = true;
     }
 
     tree = sway.get_tree().unwrap();
     let eviction_command = enforce_eviction(get_workspaces(&tree));
     if eviction_command != "" {
         sway.run_command(eviction_command).unwrap();
+        ran_command = true;
+    }
+
+    if ran_command {
+        sway.run_command(refocus_command).unwrap();
     }
 }
 
