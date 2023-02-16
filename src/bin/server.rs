@@ -1,15 +1,46 @@
+fn process_layout(sway : &swayipc::Connection, tokens: Vec<&str>) {
+    println!("process_layout {:?}", tokens);
+}
+
+fn process_move(sway : &swayipc::Connection, tokens: Vec<&str>) {
+    println!("process_move {:?}", tokens);
+}
+
+fn process_move_to_workspace(sway : &swayipc::Connection, tokens: Vec<&str>) {
+    println!("process_move_to_workspace {:?}", tokens);
+}
+
+fn process_kill(sway : &swayipc::Connection, tokens: Vec<&str>) {
+    println!("process_kill {:?}", tokens);
+}
+
 fn command_processor(command_receiver: async_priority_channel::Receiver<String, usize>) {
-    let _sway = swayipc::Connection::new().unwrap();
+    let sway = swayipc::Connection::new().unwrap();
     loop {
         let command = sync_recv(&command_receiver);
-        println!("{}", command);
+        let mut tokens: Vec<&str> = command.split_whitespace().collect();
+        match tokens.remove(0) {
+            dsl::constants::CMD_LAYOUT => process_layout(&sway, tokens),
+            dsl::constants::CMD_MOVE => process_move(&sway, tokens),
+            dsl::constants::CMD_MOVE_TO_WORKSPACE => process_move_to_workspace(&sway, tokens),
+            dsl::constants::CMD_KILL => process_kill(&sway, tokens),
+            _ => continue,
+        }
     }
 }
 
 fn sway_event_listener(command_sender: async_priority_channel::Sender<String, usize>) {
     let subs = [swayipc::EventType::Window];
-    for _event in swayipc::Connection::new().unwrap().subscribe(subs).unwrap() {
-        sync_send(&command_sender, "layout".to_string(), 1);
+    let sway_window_changes = vec![swayipc::WindowChange::New, swayipc::WindowChange::Close, swayipc::WindowChange::Move];
+    for event in swayipc::Connection::new().unwrap().subscribe(subs).unwrap() {
+        let window_event = match event.unwrap() {
+            swayipc::Event::Window(c)=> c,
+            _ => unreachable!()
+        };
+        if sway_window_changes.contains(&window_event.change) {
+            sync_send(&command_sender, dsl::constants::CMD_LAYOUT.to_string(), 1);
+        }
+
     }
 }
 
