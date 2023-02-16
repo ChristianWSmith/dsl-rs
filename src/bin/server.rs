@@ -1,5 +1,5 @@
-fn process_layout(sway: &swayipc::Connection, tokens: Vec<&str>) {
-    println!("process_layout {:?}", tokens);
+fn process_layout(sway: &swayipc::Connection) {
+    println!("process_layout");
 }
 
 fn process_move(sway: &swayipc::Connection, tokens: Vec<&str>) {
@@ -10,8 +10,8 @@ fn process_move_to_workspace(sway: &swayipc::Connection, tokens: Vec<&str>) {
     println!("process_move_to_workspace {:?}", tokens);
 }
 
-fn process_kill(sway: &swayipc::Connection, tokens: Vec<&str>) {
-    println!("process_kill {:?}", tokens);
+fn process_kill(sway: &swayipc::Connection) {
+    println!("process_kill");
 }
 
 fn command_processor(command_receiver: async_priority_channel::Receiver<String, usize>) {
@@ -20,10 +20,10 @@ fn command_processor(command_receiver: async_priority_channel::Receiver<String, 
         let command = sync_recv(&command_receiver);
         let mut tokens: Vec<&str> = command.split_whitespace().collect();
         match tokens.remove(0) {
-            dsl::constants::CMD_LAYOUT => process_layout(&sway, tokens),
+            dsl::constants::CMD_LAYOUT => process_layout(&sway),
             dsl::constants::CMD_MOVE => process_move(&sway, tokens),
             dsl::constants::CMD_MOVE_TO_WORKSPACE => process_move_to_workspace(&sway, tokens),
-            dsl::constants::CMD_KILL => process_kill(&sway, tokens),
+            dsl::constants::CMD_KILL => process_kill(&sway),
             _ => continue,
         }
     }
