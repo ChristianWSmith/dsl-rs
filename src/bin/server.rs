@@ -99,14 +99,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         async_priority_channel::Receiver<String, usize>,
     ) = async_priority_channel::unbounded();
 
-    let dbus_listener_command_sender = command_sender.clone();
-    let sway_listener_command_sender = command_sender.clone();
+    let command_sender_clone = command_sender.clone();
 
     let dbus_handle = std::thread::spawn(move || {
-        dbus_listener(dbus_listener_command_sender);
+        dbus_listener(command_sender);
     });
     let sway_handle = std::thread::spawn(move || {
-        sway_event_listener(sway_listener_command_sender);
+        sway_event_listener(command_sender_clone);
     });
     let processor_handle = std::thread::spawn(move || {
         command_processor(command_receiver);
