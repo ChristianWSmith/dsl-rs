@@ -211,6 +211,7 @@ fn make_move_to_workspace_command(
         .unwrap()
         .marks
         .contains(&from_master_mark)
+        && from_workspace.nodes.len() > 1
     {
         (promote_pre, promote_post) = promote(from_workspace);
     }
