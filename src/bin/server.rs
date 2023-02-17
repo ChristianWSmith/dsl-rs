@@ -249,7 +249,10 @@ fn make_move_to_workspace_command(
 
 fn process_layout(sway: &mut swayipc::Connection) {
     let mut tree = sway.get_tree().unwrap();
-    let focused = find_focused(&tree).unwrap();
+    let focused = match find_focused(&tree) {
+        Some(n) => n,
+        None => return,
+    };
     let refocus_command = format!("[con_id={}] focus; ", focused.id);
 
     let mut ran_command = false;
@@ -366,7 +369,10 @@ fn process_move_to_workspace(sway: &mut swayipc::Connection, tokens: Vec<&str>) 
 fn process_kill(sway: &mut swayipc::Connection) {
     let tree = sway.get_tree().unwrap();
     let parents = get_parent_map(&tree);
-    let focused = find_focused(&tree).unwrap();
+    let focused = match find_focused(&tree) {
+        Some(n) => n,
+        None => return,
+    };
     let parent = *parents.get(&focused.id).unwrap();
     let grandparent = *parents.get(&parent.id).unwrap();
     if grandparent.node_type == swayipc::NodeType::Workspace {
@@ -376,7 +382,7 @@ fn process_kill(sway: &mut swayipc::Connection) {
             let (pre, post) = promote(grandparent);
             kill_command.push(pre);
             kill_command.push(format!(
-                "[con_id={}] move container to scratchpad; ",
+                "[con_id={}] move container to workspace _hidden; ",
                 focused.id
             ));
             kill_command.push(post);
