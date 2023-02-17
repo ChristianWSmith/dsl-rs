@@ -2,11 +2,13 @@ fn get_parent_map(node: &swayipc::Node) -> std::collections::HashMap<i64, &swayi
     let mut parent_map: std::collections::HashMap<i64, &swayipc::Node> =
         std::collections::HashMap::new();
     let mut layer = vec![node];
+    parent_map.insert(node.id, node);
     let mut next_layer = vec![];
     while layer.len() > 0 {
         for node in layer {
             for child in &node.nodes {
                 parent_map.insert(child.id, node);
+                next_layer.push(child);
             }
         }
         layer = next_layer;
@@ -47,13 +49,13 @@ fn get_leaf_containers(node: &swayipc::Node) -> Vec<&swayipc::Node> {
     out
 }
 
-fn find_focus_id(node: &swayipc::Node) -> i64 {
+fn find_focused(node: &swayipc::Node) -> Option<&swayipc::Node> {
     let mut layer = vec![node];
     let mut next_layer = vec![];
     while layer.len() > 0 {
         for node in layer {
             if node.focused {
-                return node.id;
+                return Some(node);
             } else {
                 next_layer.extend(&node.nodes);
             }
@@ -61,7 +63,7 @@ fn find_focus_id(node: &swayipc::Node) -> i64 {
         layer = next_layer;
         next_layer = vec![];
     }
-    -1
+    None
 }
 
 fn enforce_splitting_workspace(workspace: &swayipc::Node) -> Vec<String> {
@@ -157,10 +159,28 @@ fn enforce_eviction(workspaces: Vec<&swayipc::Node>) -> String {
     out.concat()
 }
 
+fn promote(workspace: &swayipc::Node) -> (String, String) {
+    let master_mark = format!("master-{:}", workspace.name.clone().unwrap());
+    let stack_top = workspace.nodes.get(1).unwrap().nodes.get(0).unwrap();
+    let pre = format!(
+        "[con_id={}] mark --add {}; [con_id={}] move container to mark {:}; ",
+        stack_top.id,
+        dsl::constants::SWAY_TEMP_MASTER_MARK,
+        stack_top.id,
+        master_mark
+    );
+    let post = format!(
+        "[con_id={}] unmark {}; ",
+        stack_top.id,
+        dsl::constants::SWAY_TEMP_MASTER_MARK
+    );
+    (pre, post)
+}
+
 fn process_layout(sway: &mut swayipc::Connection) {
     let mut tree = sway.get_tree().unwrap();
-    let focus_id = find_focus_id(&tree);
-    let refocus_command = format!("[con_id={}] focus; ", focus_id);
+    let focused = find_focused(&tree).unwrap();
+    let refocus_command = format!("[con_id={}] focus; ", focused.id);
 
     let mut ran_command = false;
 
@@ -200,8 +220,26 @@ fn process_move_to_workspace(sway: &mut swayipc::Connection, tokens: Vec<&str>) 
 }
 
 fn process_kill(sway: &mut swayipc::Connection) {
-    println!("process_kill");
     let tree = sway.get_tree().unwrap();
+    let parents = get_parent_map(&tree);
+    let focused = find_focused(&tree).unwrap();
+    let parent = *parents.get(&focused.id).unwrap();
+    let grandparent = *parents.get(&parent.id).unwrap();
+    if grandparent.node_type == swayipc::NodeType::Workspace {
+        let master_mark = format!("master-{:}", grandparent.name.clone().unwrap());
+        if parent.marks.contains(&master_mark) {
+            let mut kill_command: Vec<String> = vec![];
+            let (pre, post) = promote(grandparent);
+            kill_command.push(pre);
+            kill_command.push(format!("[con_id={}] kill; ", focused.id));
+            kill_command.push(post);
+            sway.run_command(kill_command.concat()).unwrap();
+        } else {
+            sway.run_command("kill").unwrap();
+        }
+    } else {
+        sway.run_command("kill").unwrap();
+    }
 }
 
 fn command_processor(command_receiver: async_priority_channel::Receiver<String, usize>) {
