@@ -372,14 +372,20 @@ fn process_kill(sway: &mut swayipc::Connection) {
             let mut kill_command: Vec<String> = vec![];
             let (pre, post) = promote(grandparent);
             kill_command.push(pre);
-            kill_command.push(format!("[con_id={}] kill; ", focused.id));
+            kill_command.push(format!(
+                "[con_id={}] move container to scratchpad; ",
+                focused.id
+            ));
             kill_command.push(post);
+            kill_command.push(format!("[con_id={}] kill; ", focused.id));
             sway.run_command(kill_command.concat()).unwrap();
         } else {
-            sway.run_command("kill").unwrap();
+            sway.run_command(format!("[con_id={}] kill; ", focused.id))
+                .unwrap();
         }
     } else {
-        sway.run_command("kill").unwrap();
+        sway.run_command(format!("[con_id={}] kill; ", focused.id))
+            .unwrap();
     }
 }
 
