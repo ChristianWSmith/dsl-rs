@@ -318,7 +318,8 @@ fn process_move(sway: &mut swayipc::Connection, tokens: Vec<&str>) {
             "focus {}; unmark {}; ",
             backward,
             dsl::constants::SWAY_TEMP_SWAP_MARK
-        ));
+        ))
+        .unwrap();
         let move_to_workspace_command = make_move_to_workspace_command(
             pre_workspace,
             post_workspace.name.as_ref().unwrap(),
