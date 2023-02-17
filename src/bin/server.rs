@@ -66,6 +66,21 @@ fn find_focused(node: &swayipc::Node) -> Option<&swayipc::Node> {
     None
 }
 
+fn find_workspace<'a>(
+    node: &'a swayipc::Node,
+    parent_map: std::collections::HashMap<i64, &'a swayipc::Node>,
+) -> Option<&'a swayipc::Node> {
+    let mut temp_node = node;
+    while temp_node != parent_map[&temp_node.id] {
+        if temp_node.node_type == swayipc::NodeType::Workspace {
+            return Some(temp_node);
+        } else {
+            temp_node = parent_map[&temp_node.id];
+        }
+    }
+    None
+}
+
 fn enforce_splitting_workspace(workspace: &swayipc::Node) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     let leaves = get_leaf_containers(&workspace);
@@ -94,8 +109,8 @@ fn enforce_splitting(workspaces: Vec<&swayipc::Node>) -> String {
 
 fn enforce_marking_workspace(workspace: &swayipc::Node) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    let master_mark = format!("master-{:}", workspace.name.clone().unwrap());
-    let stack_mark = format!("stack-{:}", workspace.name.clone().unwrap());
+    let master_mark = format!("master-{:}", workspace.name.as_ref().unwrap());
+    let stack_mark = format!("stack-{:}", workspace.name.as_ref().unwrap());
     if workspace.nodes.len() == 2 {
         let left = workspace.nodes.get(0).unwrap();
         let right = workspace.nodes.get(1).unwrap();
@@ -125,8 +140,8 @@ fn enforce_marking(workspaces: Vec<&swayipc::Node>) -> String {
 
 fn enforce_eviction_workspace(workspace: &swayipc::Node) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    let master_mark = format!("master-{:}", workspace.name.clone().unwrap());
-    let stack_mark = format!("stack-{:}", workspace.name.clone().unwrap());
+    let master_mark = format!("master-{:}", workspace.name.as_ref().unwrap());
+    let stack_mark = format!("stack-{:}", workspace.name.as_ref().unwrap());
     if workspace.nodes.len() > 1 {
         let parent = workspace.nodes.get(0).unwrap();
         if parent.marks.contains(&master_mark) {
@@ -160,7 +175,7 @@ fn enforce_eviction(workspaces: Vec<&swayipc::Node>) -> String {
 }
 
 fn promote(workspace: &swayipc::Node) -> (String, String) {
-    let master_mark = format!("master-{:}", workspace.name.clone().unwrap());
+    let master_mark = format!("master-{:}", workspace.name.as_ref().unwrap());
     let stack_top = workspace.nodes.get(1).unwrap().nodes.get(0).unwrap();
     let pre = format!(
         "[con_id={}] mark --add {}; [con_id={}] move container to mark {:}; ",
@@ -175,6 +190,17 @@ fn promote(workspace: &swayipc::Node) -> (String, String) {
         dsl::constants::SWAY_TEMP_MASTER_MARK
     );
     (pre, post)
+}
+
+fn make_move_to_workspace_command(
+    from_workspace: &swayipc::Node,
+    to_workspace_name: String,
+    to_workspace_nodes: &Vec<swayipc::Node>,
+    focus: &swayipc::Node,
+    focus_follow: bool,
+) -> String {
+    // TODO: this
+    "".to_string()
 }
 
 fn process_layout(sway: &mut swayipc::Connection) {
@@ -210,13 +236,49 @@ fn process_layout(sway: &mut swayipc::Connection) {
 }
 
 fn process_move(sway: &mut swayipc::Connection, tokens: Vec<&str>) {
+    // TODO: finish this
     println!("process_move {:?}", tokens);
+
+    if tokens.len() == 0 {
+        return;
+    }
+
     let tree = sway.get_tree().unwrap();
+
+    let (forward, backward) = match *tokens.get(0).unwrap() {
+        "up" => ("up", "down"),
+        "down" => ("down", "up"),
+        "left" => ("left", "right"),
+        "right" => ("right", "left"),
+        _ => return,
+    };
 }
 
 fn process_move_to_workspace(sway: &mut swayipc::Connection, tokens: Vec<&str>) {
-    println!("process_move_to_workspace {:?}", tokens);
+    if tokens.len() == 0 {
+        return;
+    }
+    let to_workspace_name = *tokens.get(0).unwrap();
     let tree = sway.get_tree().unwrap();
+    let parents = get_parent_map(&tree);
+    let focused = find_focused(&tree).unwrap();
+    let from_workspace = find_workspace(focused, parents).unwrap();
+    let workspaces = get_workspaces(&tree);
+    let mut to_workspace_nodes: &Vec<swayipc::Node> = &vec![];
+    for workspace in workspaces {
+        if workspace.name.as_ref().unwrap() == &to_workspace_name.to_string() {
+            to_workspace_nodes = &workspace.nodes;
+            break;
+        }
+    }
+    let move_to_workspace_command = make_move_to_workspace_command(
+        from_workspace,
+        to_workspace_name.to_string(),
+        to_workspace_nodes,
+        focused,
+        false,
+    );
+    sway.run_command(move_to_workspace_command).unwrap();
 }
 
 fn process_kill(sway: &mut swayipc::Connection) {
@@ -226,7 +288,7 @@ fn process_kill(sway: &mut swayipc::Connection) {
     let parent = *parents.get(&focused.id).unwrap();
     let grandparent = *parents.get(&parent.id).unwrap();
     if grandparent.node_type == swayipc::NodeType::Workspace {
-        let master_mark = format!("master-{:}", grandparent.name.clone().unwrap());
+        let master_mark = format!("master-{:}", grandparent.name.as_ref().unwrap());
         if parent.marks.contains(&master_mark) {
             let mut kill_command: Vec<String> = vec![];
             let (pre, post) = promote(grandparent);
