@@ -11,3 +11,10 @@ dbus-crossroads = "0.5.2"
 dbus = "0.9.7"
 async-priority-channel = "0.1.0"
 futures = "0.3.26"
+
+[profile.release]
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1
+opt-level = 3
