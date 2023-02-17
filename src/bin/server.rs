@@ -176,6 +176,9 @@ fn enforce_eviction(workspaces: Vec<&swayipc::Node>) -> String {
 
 fn promote(workspace: &swayipc::Node) -> (String, String) {
     let master_mark = format!("master-{:}", workspace.name.as_ref().unwrap());
+    if workspace.nodes.len() < 2 || workspace.nodes.get(1).unwrap().nodes.len() == 0 {
+        return ("".to_string(), "".to_string());
+    }
     let stack_top = workspace.nodes.get(1).unwrap().nodes.get(0).unwrap();
     let pre = format!(
         "[con_id={}] mark --add {}; [con_id={}] move container to mark {:}; ",
@@ -211,7 +214,6 @@ fn make_move_to_workspace_command(
         .unwrap()
         .marks
         .contains(&from_master_mark)
-        && from_workspace.nodes.len() > 1
     {
         (promote_pre, promote_post) = promote(from_workspace);
     }
