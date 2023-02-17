@@ -68,7 +68,7 @@ fn find_focused(node: &swayipc::Node) -> Option<&swayipc::Node> {
 
 fn find_workspace<'a>(
     node: &'a swayipc::Node,
-    parent_map: std::collections::HashMap<i64, &'a swayipc::Node>,
+    parent_map: &std::collections::HashMap<i64, &'a swayipc::Node>,
 ) -> Option<&'a swayipc::Node> {
     let mut temp_node = node;
     while temp_node != parent_map[&temp_node.id] {
@@ -197,10 +197,51 @@ fn make_move_to_workspace_command(
     to_workspace_name: String,
     to_workspace_nodes: &Vec<swayipc::Node>,
     focus: &swayipc::Node,
+    parent_map: &std::collections::HashMap<i64, &swayipc::Node>,
     focus_follow: bool,
 ) -> String {
-    // TODO: this
-    "".to_string()
+    let mut out: Vec<String> = vec![];
+    let from_master_mark = format!("master-{:}", from_workspace.name.as_ref().unwrap());
+    let to_stack_mark = format!("stack-{:}", to_workspace_name);
+
+    let mut promote_pre = "".to_string();
+    let mut promote_post = "".to_string();
+    if parent_map
+        .get(&focus.id)
+        .unwrap()
+        .marks
+        .contains(&from_master_mark)
+    {
+        (promote_pre, promote_post) = promote(from_workspace);
+    }
+
+    let mut move_to_stack_mark = false;
+    for node in to_workspace_nodes {
+        if node.marks.contains(&to_stack_mark) {
+            move_to_stack_mark = true;
+            break;
+        }
+    }
+
+    out.push(promote_pre);
+    if move_to_stack_mark {
+        out.push(format!("move container to mark {:}; ", to_stack_mark));
+    } else {
+        out.push(format!(
+            "move container to workspace {:}; ",
+            to_workspace_name
+        ));
+    }
+
+    if focus_follow {
+        out.push(format!(
+            "workspace {:}; [con_id={}] focus; ",
+            to_workspace_name, focus.id
+        ))
+    }
+    out.push(promote_post);
+
+    out.concat()
 }
 
 fn process_layout(sway: &mut swayipc::Connection) {
@@ -262,7 +303,7 @@ fn process_move_to_workspace(sway: &mut swayipc::Connection, tokens: Vec<&str>) 
     let tree = sway.get_tree().unwrap();
     let parents = get_parent_map(&tree);
     let focused = find_focused(&tree).unwrap();
-    let from_workspace = find_workspace(focused, parents).unwrap();
+    let from_workspace = find_workspace(focused, &parents).unwrap();
     let workspaces = get_workspaces(&tree);
     let mut to_workspace_nodes: &Vec<swayipc::Node> = &vec![];
     for workspace in workspaces {
@@ -276,6 +317,7 @@ fn process_move_to_workspace(sway: &mut swayipc::Connection, tokens: Vec<&str>) 
         to_workspace_name.to_string(),
         to_workspace_nodes,
         focused,
+        &parents,
         false,
     );
     sway.run_command(move_to_workspace_command).unwrap();
