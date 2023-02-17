@@ -194,7 +194,7 @@ fn promote(workspace: &swayipc::Node) -> (String, String) {
 
 fn make_move_to_workspace_command(
     from_workspace: &swayipc::Node,
-    to_workspace_name: String,
+    to_workspace_name: &String,
     to_workspace_nodes: &Vec<swayipc::Node>,
     focus: &swayipc::Node,
     parent_map: &std::collections::HashMap<i64, &swayipc::Node>,
@@ -277,14 +277,9 @@ fn process_layout(sway: &mut swayipc::Connection) {
 }
 
 fn process_move(sway: &mut swayipc::Connection, tokens: Vec<&str>) {
-    // TODO: finish this
-    println!("process_move {:?}", tokens);
-
     if tokens.len() == 0 {
         return;
     }
-
-    let tree = sway.get_tree().unwrap();
 
     let (forward, backward) = match *tokens.get(0).unwrap() {
         "up" => ("up", "down"),
@@ -293,6 +288,47 @@ fn process_move(sway: &mut swayipc::Connection, tokens: Vec<&str>) {
         "right" => ("right", "left"),
         _ => return,
     };
+
+    let pre_tree = sway.get_tree().unwrap();
+    let parent_map = get_parent_map(&pre_tree);
+    let pre_focused = find_focused(&pre_tree).unwrap();
+    let pre_workspace = find_workspace(pre_focused, &parent_map).unwrap();
+
+    sway.run_command(format!(
+        "mark --add {}; focus {}; ",
+        dsl::constants::SWAY_TEMP_SWAP_MARK,
+        forward
+    ))
+    .unwrap();
+
+    let post_tree = sway.get_tree().unwrap();
+    let post_focused = find_focused(&post_tree).unwrap();
+    let post_workspace = find_workspace(post_focused, &parent_map).unwrap();
+
+    if pre_workspace.name == post_workspace.name {
+        sway.run_command(format!(
+            "swap container with mark {}; focus {}; unmark {}; ",
+            dsl::constants::SWAY_TEMP_SWAP_MARK,
+            forward,
+            dsl::constants::SWAY_TEMP_SWAP_MARK
+        ))
+        .unwrap();
+    } else {
+        sway.run_command(format!(
+            "focus {}; unmark {}; ",
+            backward,
+            dsl::constants::SWAY_TEMP_SWAP_MARK
+        ));
+        let move_to_workspace_command = make_move_to_workspace_command(
+            pre_workspace,
+            post_workspace.name.as_ref().unwrap(),
+            &post_workspace.nodes,
+            &pre_focused,
+            &parent_map,
+            true,
+        );
+        sway.run_command(move_to_workspace_command).unwrap();
+    }
 }
 
 fn process_move_to_workspace(sway: &mut swayipc::Connection, tokens: Vec<&str>) {
@@ -314,7 +350,7 @@ fn process_move_to_workspace(sway: &mut swayipc::Connection, tokens: Vec<&str>) 
     }
     let move_to_workspace_command = make_move_to_workspace_command(
         from_workspace,
-        to_workspace_name.to_string(),
+        &to_workspace_name.to_string(),
         to_workspace_nodes,
         focused,
         &parents,
