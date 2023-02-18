@@ -2,6 +2,7 @@
 
 if ! which footclient > /dev/null || ! which fish > /dev/null || ! which figlet > /dev/null || ! which lolcat > /dev/null || ! swaymsg > /dev/null
 then
+    echo Requires footclient, fish, figlet, lolcat, and swaymsg.
     exit 1
 fi
 
