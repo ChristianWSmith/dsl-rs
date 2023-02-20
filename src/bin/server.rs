@@ -142,25 +142,28 @@ fn enforce_eviction_workspace(workspace: &swayipc::Node) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     let master_mark = format!("master-{:}", workspace.name.as_ref().unwrap());
     let stack_mark = format!("stack-{:}", workspace.name.as_ref().unwrap());
-    if workspace.nodes.len() > 1 {
-        let parent = workspace.nodes.get(0).unwrap();
-        if parent.marks.contains(&master_mark) {
-            let mut master_found = false;
-            for child in &parent.nodes {
-                let is_temp_master = child
-                    .marks
-                    .contains(&dsl::constants::SWAY_TEMP_MASTER_MARK.to_string());
-                if master_found {
-                    if !is_temp_master {
-                        out.push(format!(
-                            "[con_id={}] move container to mark {:}; ",
-                            child.id, stack_mark
-                        ));
-                    }
-                } else if !is_temp_master {
-                    master_found = true
-                }
-            }
+    if workspace.nodes.len() < 2 {
+        return out;
+    }
+    let parent = workspace.nodes.get(0).unwrap();
+    if !parent.marks.contains(&master_mark) {
+        return out;
+    }
+    let mut master_found = false;
+    for child in &parent.nodes {
+        let is_temp_master = child
+            .marks
+            .contains(&dsl::constants::SWAY_TEMP_MASTER_MARK.to_string());
+        if is_temp_master {
+            continue;
+        }
+        if master_found {
+            out.push(format!(
+                "[con_id={}] move container to mark {:}; ",
+                child.id, stack_mark
+            ));
+        } else {
+            master_found = true
         }
     }
     out
